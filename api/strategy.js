@@ -1,50 +1,32 @@
-const RATE_LIMIT = new Map();
-const RATE_WINDOW_MS = 60_000;
-const RATE_MAX = 10;
-
-function checkRateLimit(ip) {
-  const now = Date.now();
-  const entry = RATE_LIMIT.get(ip);
-  if (!entry || now - entry.start > RATE_WINDOW_MS) {
-    RATE_LIMIT.set(ip, { start: now, count: 1 });
-    return true;
-  }
-  entry.count++;
-  return entry.count <= RATE_MAX;
-}
+import { guard, validateStats, dailyCapExceeded, capList, clampField, num } from "./_guards.js";
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
-  if (!checkRateLimit(ip)) {
-    return res.status(429).json({ error: 'Too many requests. Please wait a minute and try again.' });
-  }
+  const blocked = await guard(req);
+  if (blocked) return res.status(blocked.status).json({ error: blocked.error });
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: 'API key not configured' });
-  }
 
   try {
-    const { gpa, lsat, urm, softs, timingLabel, results } = req.body;
+    const { gpa, lsat, urm, softs, timingLabel, results } = req.body || {};
 
-    if (!gpa || !lsat || !results || !Array.isArray(results)) {
+    if (!gpa || !lsat || !Array.isArray(results) || results.length === 0) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
-    if (gpa < 2.0 || gpa > 4.33 || lsat < 120 || lsat > 180) {
-      return res.status(400).json({ error: 'Invalid GPA or LSAT values' });
+    const statErr = validateStats(gpa, lsat);
+    if (statErr) return res.status(statErr.status).json({ error: statErr.error });
+
+    if (await dailyCapExceeded()) {
+      return res.status(429).json({ error: 'Daily capacity reached. AI features reset tomorrow.' });
     }
 
-    const timingNote = timingLabel ? `Application date timing: ${timingLabel}` : 'No date provided';
-    const summary = results.map(r =>
-      `${r.name}: Accept ${r.accept}% / WL ${r.waitlist}% / Deny ${r.deny}% | Schol: ${r.scholLabel} ~${r.scholLikelihood}% / $${r.estMin}-$${r.estMax} | Seats: ~${r.seats}`
+    const capped = capList(results);
+    const timingNote = timingLabel ? `Application date timing: ${clampField(timingLabel, 40)}` : 'No date provided';
+    const summary = capped.map(r =>
+      `${clampField(r.name)}: Accept ${num(r.accept)}% / WL ${num(r.waitlist)}% / Deny ${num(r.deny)}% | Schol: ${clampField(r.scholLabel, 40)} ~${num(r.scholLikelihood)}% / $${num(r.estMin)}-$${num(r.estMax)} | Seats: ~${num(r.seats)}`
     ).join('\n');
 
     const system = 'You are a top law school admissions counselor. Give 3-4 sentences of sharp, actionable strategy. Reference specific schools by name. Prioritize timing urgency if relevant. No filler.';
-    const userMessage = `GPA:${gpa} LSAT:${lsat} URM:${urm} Softs:${softs}\n${timingNote}\n2025-26 cycle: apps up 23% nationally. March 2026 - many T14s near class capacity.\n\n${summary}\n\nGive strategic insight covering admission positioning, waitlist strategy, and scholarship leverage.`;
+    const userMessage = `GPA:${num(gpa)} LSAT:${num(lsat)} URM:${urm === true} Softs:${clampField(softs, 20)}\n${timingNote}\n2025-26 cycle: apps up 23% nationally. March 2026 - many T14s near class capacity.\n\n${summary}\n\nGive strategic insight covering admission positioning, waitlist strategy, and scholarship leverage.`;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
