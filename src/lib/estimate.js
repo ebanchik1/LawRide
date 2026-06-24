@@ -36,10 +36,17 @@ export function scoreApplicant(gpa, lsat, school) {
   return ((gpa - school.median_gpa)/0.12 + (lsat - school.median_lsat)/3.5) / 2;
 }
 
+// Soft-factor buckets → score boost. Resume classification or the manual
+// dropdown sets one of these keys. Anything unrecognized — including the legacy
+// "good" value from an old shared URL — maps to 0 (neutral) for back-compat.
+// "average" stays 0 (= the pre-4-bucket baseline) so the remap introduces no
+// systematic drift; "poor" can lower the number, so the override must be clear.
+export const SOFTS_WEIGHT = { poor: -0.05, average: 0, above_average: 0.10, excellent: 0.18 };
+
 export function estimateOutcomes(gpa, lsat, school, urm, softs, tk) {
   const timing = TIMING_PROFILES[tk] || TIMING_PROFILES.early;
   const base = scoreApplicant(gpa, lsat, school);
-  const boost = (urm ? 0.35 : 0) + (softs==="excellent" ? 0.18 : softs==="good" ? 0.07 : 0);
+  const boost = (urm ? 0.35 : 0) + (SOFTS_WEIGHT[softs] ?? 0);
   const adj = base + boost;
   const isT14 = school.tier === "T14" || school.tier === "T25";
   const admPenalty = isT14 ? timing.admPenalty : timing.admPenalty * 0.35;

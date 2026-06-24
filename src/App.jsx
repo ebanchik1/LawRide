@@ -355,19 +355,19 @@ export default function App() {
                     <span style={{position:"relative",display:"inline-flex",cursor:"help"}} className="softs-tip-wrap">
                       <span style={{width:15,height:15,borderRadius:"50%",background:"#e0dbd2",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#999",lineHeight:1}}>?</span>
                       <span className="softs-tip" style={{position:"absolute",bottom:"calc(100% + 8px)",left:"50%",transform:"translateX(-50%)",width:240,padding:"10px 12px",borderRadius:10,background:"#1a1a1a",color:"#e8e4dc",fontSize:11,lineHeight:1.6,fontWeight:400,letterSpacing:"0",boxShadow:"0 8px 24px rgba(0,0,0,0.2)",pointerEvents:"none",opacity:0,transition:"opacity 0.15s",zIndex:60,textAlign:"left"}}>
-                        Work experience, leadership, community involvement, publications, and personal statement strength. <strong style={{color:"#e05c2a"}}>Excellent</strong> = T14-level WE, notable achievements. <strong style={{color:"#fbbf24"}}>Good</strong> = solid WE or strong extracurriculars. <strong style={{color:"#ccc"}}>Average</strong> = standard applicant profile.
+                        Work experience, leadership, community involvement, publications, and personal statement strength. <strong style={{color:"#e05c2a"}}>Excellent</strong> = T14-level WE, notable achievements. <strong style={{color:"#fbbf24"}}>Above Avg</strong> = solid WE or strong extracurriculars/leadership. <strong style={{color:"#ccc"}}>Average</strong> = standard applicant profile. <strong style={{color:"#f87171"}}>Poor</strong> = thin background, no notable WE.
                         <span style={{position:"absolute",bottom:-5,left:"50%",transform:"translateX(-50%) rotate(45deg)",width:10,height:10,background:"#1a1a1a"}}/>
                       </span>
                     </span>
                   </label>
                   <div style={{display:"flex",gap:6}}>
-                    {["average","good","excellent"].map(s => (
-                      <button key={s} onClick={() => setSofts(s)} style={{
-                        flex:1,padding:"8px 4px",borderRadius:8,border:`1.5px solid ${softs===s?"#1a1a1a":"#e0dbd2"}`,
-                        cursor:"pointer",fontSize:13,fontWeight:softs===s?700:400,
-                        background:softs===s?"#1a1a1a":"#faf9f7",
-                        color:softs===s?"#fff":"#666",transition:"all 0.15s"
-                      }}>{s.charAt(0).toUpperCase()+s.slice(1)}</button>
+                    {[["poor","Poor"],["average","Average"],["above_average","Above Avg"],["excellent","Excellent"]].map(([val,label]) => (
+                      <button key={val} onClick={() => setSofts(val)} style={{
+                        flex:1,padding:"8px 4px",minHeight:44,borderRadius:8,border:`1.5px solid ${softs===val?"#1a1a1a":"#e0dbd2"}`,
+                        cursor:"pointer",fontSize:12,fontWeight:softs===val?700:400,whiteSpace:"nowrap",
+                        background:softs===val?"#1a1a1a":"#faf9f7",
+                        color:softs===val?"#fff":"#666",transition:"all 0.15s"
+                      }}>{label}</button>
                     ))}
                   </div>
                 </div>

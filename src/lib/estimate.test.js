@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getTimingLabel, TIMING_PROFILES, seatsRemaining, scoreApplicant, estimateOutcomes } from "./estimate.js";
+import { getTimingLabel, TIMING_PROFILES, seatsRemaining, scoreApplicant, estimateOutcomes, SOFTS_WEIGHT } from "./estimate.js";
 
 // A representative T14 school (Yale-shaped) used as a fixture so these tests
 // don't break when the real SCHOOLS data is edited.
@@ -142,5 +142,31 @@ describe("estimateOutcomes", () => {
       expect(r.estMin).toBeGreaterThanOrEqual(0);
       expect(r.estMax).toBeGreaterThanOrEqual(0);
     }
+  });
+});
+
+describe("softs bucket weights (4-bucket remap)", () => {
+  // score = scoreApplicant + SOFTS_WEIGHT[softs]; isolate the boost via score.
+  const sc = (softs) => estimateOutcomes(3.7, 168, T14, false, softs, "early").score;
+
+  it("maps each bucket to its weight relative to average", () => {
+    const avg = sc("average");
+    expect(sc("poor") - avg).toBeCloseTo(-0.05, 10);
+    expect(sc("above_average") - avg).toBeCloseTo(0.10, 10);
+    expect(sc("excellent") - avg).toBeCloseTo(0.18, 10);
+  });
+
+  // CRITICAL regression guard: the remap must NOT move the default-"average"
+  // applicant. average boost is exactly 0 — identical to pre-4-bucket behavior.
+  it("REGRESSION: average stays at baseline 0 (no drift from the remap)", () => {
+    expect(SOFTS_WEIGHT.average).toBe(0);
+    expect(sc("average")).toBeCloseTo(scoreApplicant(3.7, 168, T14), 10);
+  });
+
+  it("back-compat: legacy 'good' and any unknown/missing value map to 0", () => {
+    const avg = sc("average");
+    expect(sc("good")).toBeCloseTo(avg, 10);       // legacy value from an old shared URL
+    expect(sc("whatever")).toBeCloseTo(avg, 10);
+    expect(sc(undefined)).toBeCloseTo(avg, 10);
   });
 });
