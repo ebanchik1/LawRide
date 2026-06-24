@@ -238,7 +238,7 @@ export default function App() {
         @media(max-width:640px){
           .nav-inner{padding:0 12px;height:52px;}
           .nav-tabs{padding:2px;}
-          .pill-tab{padding:6px 12px;font-size:12px;}
+          .pill-tab{padding:8px 14px;font-size:12px;min-height:44px;}
           .grid-2col{grid-template-columns:1fr;}
           .grid-3col{grid-template-columns:1fr 1fr;}
           .rec-detail-grid{grid-template-columns:1fr;}
@@ -363,7 +363,7 @@ export default function App() {
                   <div style={{display:"flex",gap:6}}>
                     {["average","good","excellent"].map(s => (
                       <button key={s} onClick={() => setSofts(s)} style={{
-                        flex:1,padding:"8px 4px",borderRadius:8,border:`1.5px solid ${softs===s?"#1a1a1a":"#e0dbd2"}`,
+                        flex:1,padding:"8px 4px",minHeight:44,borderRadius:8,border:`1.5px solid ${softs===s?"#1a1a1a":"#e0dbd2"}`,
                         cursor:"pointer",fontSize:13,fontWeight:softs===s?700:400,
                         background:softs===s?"#1a1a1a":"#faf9f7",
                         color:softs===s?"#fff":"#666",transition:"all 0.15s"
