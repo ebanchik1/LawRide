@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Analytics } from "@vercel/analytics/react";
 
@@ -38,10 +38,6 @@ export default function App() {
   const [recs, setRecs] = useState(null);
   const [recStateFilter, setRecStateFilter] = useState("");
   const [recTuitionMax, setRecTuitionMax] = useState("");
-  const [mounted, setMounted] = useState(false);
-
-
-  useEffect(() => { setTimeout(() => setMounted(true), 50); }, []);
 
   const filtered = SCHOOLS.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase()) && !selected.find(x => x.name === s.name)
@@ -277,7 +273,7 @@ export default function App() {
 
         {/* ── ESTIMATOR ── */}
         {activeTab==="estimator" && (
-          <div style={{opacity:mounted?1:0,transition:"opacity 0.3s"}}>
+          <div>
             {/* Hero */}
             <div className="hero-section" style={{textAlign:"center",padding:"56px 0 44px"}}>
               <div style={{display:"inline-block",background:"#e8e4dc",borderRadius:20,padding:"4px 14px",fontSize:11,fontWeight:600,color:"#666",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:20}}>
