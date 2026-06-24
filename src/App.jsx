@@ -38,6 +38,12 @@ export default function App() {
   const [recs, setRecs] = useState(null);
   const [recStateFilter, setRecStateFilter] = useState("");
   const [recTuitionMax, setRecTuitionMax] = useState("");
+  const [resumeLoading, setResumeLoading] = useState(false);
+  const [resumeReasons, setResumeReasons] = useState([]);
+  const [bucketSource, setBucketSource] = useState("user"); // 'ai' once a resume sets it, 'user' on manual edit
+  const [resumeMsg, setResumeMsg] = useState("");
+  const [email, setEmail] = useState("");
+  const [saveState, setSaveState] = useState(""); // ''|'saving'|'saved'|'error'
 
   const filtered = SCHOOLS.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase()) && !selected.find(x => x.name === s.name)
@@ -51,6 +57,45 @@ export default function App() {
   const gpaOk = gpaNum >= 2.0 && gpaNum <= 4.33;
   const lsatOk = lsatNum >= 120 && lsatNum <= 180;
   const canGo = gpaOk && lsatOk && selected.length > 0;
+
+  // Resume → AI softs classification. Reads the PDF to base64 in-browser, posts
+  // JSON to /api/resume, pre-fills the (still-editable) softs control on success,
+  // falls back to manual on any failure. Never blocks the estimate.
+  const classifyResume = async (file) => {
+    if (!file) return;
+    if (file.type !== "application/pdf") { setResumeMsg("PDF only for now."); return; }
+    if (file.size > 3 * 1024 * 1024) { setResumeMsg("Please keep your PDF under 3MB."); return; }
+    setResumeLoading(true); setResumeMsg(""); setResumeReasons([]);
+    try {
+      const b64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result).split(",")[1] || "");
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+      const resp = await fetch("/api/resume", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pdf_base64: b64 }) });
+      const d = await resp.json();
+      if (d.ok && d.bucket) { setSofts(d.bucket); setBucketSource("ai"); setResumeReasons(d.reasons || []); }
+      else { setResumeMsg("Couldn't read your resume — pick your softs level manually below."); }
+    } catch {
+      setResumeMsg("Couldn't read your resume — pick your softs level manually below.");
+    }
+    setResumeLoading(false);
+  };
+
+  // Save the submission (email capture). Append-only; sends bucket_source so the
+  // dataset distinguishes AI-scored from self-reported softs.
+  const saveResults = async () => {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setSaveState("error"); return; }
+    setSaveState("saving");
+    try {
+      const resp = await fetch("/api/submit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, gpa: gpaNum, lsat: lsatNum, app_date: appDate || null, softs_bucket: softs, bucket_source: bucketSource, schools: results.map(r => r.name) }) });
+      const d = await resp.json();
+      setSaveState(d.saved ? "saved" : "error");
+    } catch {
+      setSaveState("error");
+    }
+  };
   const timingKey = getTimingLabel(appDate);
   const timing = TIMING_PROFILES[timingKey];
 
@@ -356,9 +401,26 @@ export default function App() {
                       </span>
                     </span>
                   </label>
+                  {/* Resume upload → AI softs */}
+                  <div style={{marginBottom:8}}>
+                    <label style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:8,border:"1.5px dashed #c8c2ba",background:"#faf9f7",cursor:resumeLoading?"default":"pointer",fontSize:12,fontWeight:600,color:"#666"}}>
+                      {resumeLoading ? <><span className="spin" style={{display:"inline-block",width:12,height:12,border:"2px solid #ddd",borderTopColor:"#999",borderRadius:"50%"}}/> Reading resume…</> : "📄 Upload resume → auto-score softs"}
+                      <input type="file" accept="application/pdf" disabled={resumeLoading} onChange={e=>classifyResume(e.target.files?.[0])} style={{display:"none"}}/>
+                    </label>
+                    {resumeReasons.length>0 && (
+                      <div style={{marginTop:8,padding:"8px 11px",borderRadius:8,background:"#f6f9ff",border:"1px solid #e8edf5"}}>
+                        <div style={{fontSize:10,fontWeight:700,color:"#2a7ae0",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>✦ AI-scored from your resume — edit below if it's off</div>
+                        <ul style={{margin:0,paddingLeft:16,fontSize:11,color:"#555",lineHeight:1.6}}>
+                          {resumeReasons.map((r,i)=><li key={i}>{r}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    {resumeMsg && <div style={{marginTop:6,fontSize:11,color:"#c0651e"}}>{resumeMsg}</div>}
+                    <div style={{marginTop:6,fontSize:10,color:"#bbb",lineHeight:1.5}}>We read your PDF to score soft factors, then delete it. It's sent to Anthropic for analysis and never stored.</div>
+                  </div>
                   <div style={{display:"flex",gap:6}}>
                     {[["poor","Poor"],["average","Average"],["above_average","Above Avg"],["excellent","Excellent"]].map(([val,label]) => (
-                      <button key={val} onClick={() => setSofts(val)} style={{
+                      <button key={val} onClick={() => { setSofts(val); setBucketSource("user"); }} style={{
                         flex:1,padding:"8px 4px",minHeight:44,borderRadius:8,border:`1.5px solid ${softs===val?"#1a1a1a":"#e0dbd2"}`,
                         cursor:"pointer",fontSize:12,fontWeight:softs===val?700:400,whiteSpace:"nowrap",
                         background:softs===val?"#1a1a1a":"#faf9f7",
@@ -489,6 +551,22 @@ export default function App() {
                       GPA {gpa} &middot; LSAT {lsat} &middot; {results.length} school{results.length>1?"s":""}
                       {appDate && <span style={{color:timing.color}}> &middot; {timing.label}</span>}
                     </p>
+                    {/* Save results / email capture */}
+                    <div style={{marginTop:12,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                      {saveState==="saved" ? (
+                        <span style={{fontSize:13,color:"#2d9e5f",fontWeight:600}}>✓ Saved — we'll follow up about your cycle.</span>
+                      ) : (
+                        <>
+                          <input value={email} onChange={e=>{setEmail(e.target.value); if(saveState)setSaveState("");}} type="email" placeholder="you@email.com"
+                            style={{padding:"8px 11px",border:`1.5px solid ${saveState==="error"?"#e05c2a":"#e0dbd2"}`,borderRadius:8,fontSize:13,background:"#faf9f7",width:200,maxWidth:"100%"}}/>
+                          <button onClick={saveResults} disabled={saveState==="saving"}
+                            style={{padding:"8px 14px",borderRadius:8,border:"none",background:"#1a1a1a",color:"#fff",cursor:"pointer",fontSize:13,fontWeight:600}}>
+                            {saveState==="saving"?"Saving…":"Save my results"}
+                          </button>
+                          {saveState==="error" && <span style={{fontSize:12,color:"#e05c2a"}}>Enter a valid email.</span>}
+                        </>
+                      )}
+                    </div>
                   </div>
                   <button onClick={getAI} disabled={aiLoading} className="cta-btn" style={{
                     padding:"9px 18px",borderRadius:10,border:"none",
