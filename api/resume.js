@@ -86,8 +86,9 @@ export default async function handler(req, res) {
     });
 
     if (!resp.ok) {
-      console.error("Resume classify: Anthropic returned", resp.status); // status only — never the body
-      return res.status(200).json({ ok: false, fallback: true });
+      const errText = await resp.text(); // TEMP DEBUG: Anthropic error describes the request, not the resume
+      console.error("Resume classify: Anthropic returned", resp.status);
+      return res.status(200).json({ ok: false, fallback: true, _debug: { stage: "anthropic", status: resp.status, err: errText.slice(0, 400) } });
     }
 
     const data = await resp.json();
@@ -98,7 +99,7 @@ export default async function handler(req, res) {
 
     const bucket = parsed?.bucket;
     if (!BUCKETS.includes(bucket)) {
-      return res.status(200).json({ ok: false, fallback: true });
+      return res.status(200).json({ ok: false, fallback: true, _debug: { stage: "parse", raw: text.slice(0, 400) } });
     }
     const reasons = Array.isArray(parsed.reasons)
       ? parsed.reasons.filter((r) => typeof r === "string").slice(0, 4).map((r) => r.slice(0, 120))
