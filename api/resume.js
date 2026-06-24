@@ -15,7 +15,7 @@
 
 import { guard, dailyCapExceeded } from "./_guards.js";
 
-const MODEL = "claude-sonnet-4-20250514"; // pinned: PDF-capable, stable
+const MODEL = "claude-sonnet-4-6"; // pinned: Sonnet 4.6, PDF-capable
 const BUCKETS = ["poor", "average", "above_average", "excellent"];
 // ~3MB raw PDF after base64 inflation; keeps the JSON body under Vercel's 4.5MB.
 const MAX_B64_CHARS = 4_200_000;
@@ -86,9 +86,8 @@ export default async function handler(req, res) {
     });
 
     if (!resp.ok) {
-      const errText = await resp.text(); // TEMP DEBUG: Anthropic error describes the request, not the resume
-      console.error("Resume classify: Anthropic returned", resp.status);
-      return res.status(200).json({ ok: false, fallback: true, _debug: { stage: "anthropic", status: resp.status, err: errText.slice(0, 400) } });
+      console.error("Resume classify: Anthropic returned", resp.status); // status only — never the body
+      return res.status(200).json({ ok: false, fallback: true });
     }
 
     const data = await resp.json();
@@ -99,7 +98,7 @@ export default async function handler(req, res) {
 
     const bucket = parsed?.bucket;
     if (!BUCKETS.includes(bucket)) {
-      return res.status(200).json({ ok: false, fallback: true, _debug: { stage: "parse", raw: text.slice(0, 400) } });
+      return res.status(200).json({ ok: false, fallback: true });
     }
     const reasons = Array.isArray(parsed.reasons)
       ? parsed.reasons.filter((r) => typeof r === "string").slice(0, 4).map((r) => r.slice(0, 120))
