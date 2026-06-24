@@ -1,4 +1,4 @@
-// Pure scoring + estimation logic for ScholarshipIQ.
+// Pure scoring + estimation logic for LawRide.
 // Extracted from App.jsx so it can be unit-tested in isolation.
 // IMPORTANT: behavior must stay identical to the original App.jsx code —
 // these functions back the live predictions people make real decisions on.

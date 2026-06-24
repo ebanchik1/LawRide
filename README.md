@@ -1,6 +1,6 @@
-# ScholarshipIQ
+# LawRide
 
-Law school admissions estimator with AI-powered recommendations. Covers 100 ABA-accredited schools with acceptance, waitlist, and scholarship probability estimates based on 2025 ABA 509 data.
+Law school admissions + scholarship estimator with AI-powered recommendations. Timing-adjusted acceptance, waitlist, and scholarship probability estimates across ABA-accredited schools, based on 2025 ABA 509 data — so you know what you'll get before you apply too late.
 
 ## Quick deploy to Vercel
 
@@ -10,7 +10,7 @@ Law school admissions estimator with AI-powered recommendations. Covers 100 ABA-
 git init
 git add .
 git commit -m "Initial commit"
-gh repo create scholarshipiq --public --push
+gh repo create lawride --public --push
 ```
 
 Or create a repo manually at github.com/new and push.
@@ -52,7 +52,7 @@ Note: The `/api/strategy` and `/api/recommendations` serverless functions only w
 ## Project structure
 
 ```
-scholarshipiq/
+lawride/
 ├── api/
 │   ├── strategy.js          # Vercel serverless: proxies AI strategy calls
 │   └── recommendations.js   # Vercel serverless: proxies AI recommendation calls
