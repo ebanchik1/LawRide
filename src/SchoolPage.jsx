@@ -20,7 +20,7 @@ export default function SchoolPage() {
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
           <h1 style={{ fontFamily: "'Instrument Serif',serif", fontSize: 28, marginBottom: 12 }}>School not found</h1>
-          <Link to="/" style={{ color: "#e05c2a", textDecoration: "none", fontWeight: 600 }}>← Back to ScholarshipIQ</Link>
+          <Link to="/" style={{ color: "#e05c2a", textDecoration: "none", fontWeight: 600 }}>← Back to LawRide</Link>
         </div>
       </div>
     );
@@ -46,7 +46,7 @@ export default function SchoolPage() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", maxWidth: 960, margin: "0 auto", padding: "0 24px", height: 58 }}>
           <Link to="/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", color: "#1a1a1a" }}>
             <div style={{ width: 30, height: 30, borderRadius: 8, background: "#1a1a1a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>⚖️</div>
-            <span style={{ fontFamily: "'Instrument Serif',serif", fontSize: 18, fontWeight: 400, letterSpacing: "-0.3px" }}>ScholarshipIQ</span>
+            <span style={{ fontFamily: "'Instrument Serif',serif", fontSize: 18, fontWeight: 400, letterSpacing: "-0.3px" }}>LawRide</span>
           </Link>
           <Link to="/" style={{ color: "#e05c2a", textDecoration: "none", fontSize: 14, fontWeight: 600 }}>← Back to Estimator</Link>
         </div>

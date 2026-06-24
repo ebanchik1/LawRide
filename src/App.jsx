@@ -252,7 +252,7 @@ export default function App() {
         <div className="nav-inner">
           <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
             <div style={{width:30,height:30,borderRadius:8,background:"#1a1a1a",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>⚖️</div>
-            <span style={{fontFamily:"'Instrument Serif',serif",fontSize:18,fontWeight:400,color:"#1a1a1a",letterSpacing:"-0.3px"}}>ScholarshipIQ</span>
+            <span style={{fontFamily:"'Instrument Serif',serif",fontSize:18,fontWeight:400,color:"#1a1a1a",letterSpacing:"-0.3px"}}>LawRide</span>
           </div>
           <div className="nav-tabs">
             {tabs.map(t => (
@@ -693,7 +693,7 @@ export default function App() {
                   <div style={{fontSize:48,marginBottom:16}}>🔒</div>
                   <h3 style={{fontFamily:"'Instrument Serif',serif",fontSize:22,fontWeight:400,color:"#1a1a1a",marginBottom:10}}>AI Recommendations</h3>
                   <p style={{fontSize:14,color:"#666",lineHeight:1.7,maxWidth:420,margin:"0 auto 20px"}}>
-                    AI-powered recommendations are available when running ScholarshipIQ directly in Claude. The estimator, results, and compare features work fully on shared links.
+                    AI-powered recommendations are available when running LawRide directly in Claude. The estimator, results, and compare features work fully on shared links.
                   </p>
                   <button onClick={()=>setActiveTab("estimator")} className="outline-btn" style={{padding:"10px 22px",borderRadius:10,border:"1.5px solid #e0dbd2",background:"#fff",color:"#333",cursor:"pointer",fontSize:14,fontWeight:500}}>← Use the Estimator</button>
                 </div>
