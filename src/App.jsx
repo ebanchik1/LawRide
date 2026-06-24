@@ -443,7 +443,7 @@ export default function App() {
               width:"100%",padding:"15px",borderRadius:12,border:"none",
               cursor:canGo?"pointer":"not-allowed",fontSize:15,fontWeight:600,letterSpacing:"0.01em",
               background:canGo?"#e05c2a":"#e0dbd2",
-              color:canGo?"#fff":"#aaa",
+              color:canGo?"#fff":"#857c6d",
               boxShadow:canGo?"0 2px 12px rgba(224,92,42,0.25)":"none",
               transition:"all 0.18s",display:"flex",alignItems:"center",justifyContent:"center",gap:8
             }}>
