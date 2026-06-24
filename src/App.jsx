@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Analytics } from "@vercel/analytics/react";
 
@@ -38,10 +38,6 @@ export default function App() {
   const [recs, setRecs] = useState(null);
   const [recStateFilter, setRecStateFilter] = useState("");
   const [recTuitionMax, setRecTuitionMax] = useState("");
-  const [mounted, setMounted] = useState(false);
-
-
-  useEffect(() => { setTimeout(() => setMounted(true), 50); }, []);
 
   const filtered = SCHOOLS.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase()) && !selected.find(x => x.name === s.name)
@@ -238,7 +234,7 @@ export default function App() {
         @media(max-width:640px){
           .nav-inner{padding:0 12px;height:52px;}
           .nav-tabs{padding:2px;}
-          .pill-tab{padding:6px 12px;font-size:12px;}
+          .pill-tab{padding:8px 14px;font-size:12px;min-height:44px;}
           .grid-2col{grid-template-columns:1fr;}
           .grid-3col{grid-template-columns:1fr 1fr;}
           .rec-detail-grid{grid-template-columns:1fr;}
@@ -277,7 +273,7 @@ export default function App() {
 
         {/* ── ESTIMATOR ── */}
         {activeTab==="estimator" && (
-          <div style={{opacity:mounted?1:0,transition:"opacity 0.3s"}}>
+          <div>
             {/* Hero */}
             <div className="hero-section" style={{textAlign:"center",padding:"56px 0 44px"}}>
               <div style={{display:"inline-block",background:"#e8e4dc",borderRadius:20,padding:"4px 14px",fontSize:11,fontWeight:600,color:"#666",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:20}}>
@@ -363,7 +359,7 @@ export default function App() {
                   <div style={{display:"flex",gap:6}}>
                     {["average","good","excellent"].map(s => (
                       <button key={s} onClick={() => setSofts(s)} style={{
-                        flex:1,padding:"8px 4px",borderRadius:8,border:`1.5px solid ${softs===s?"#1a1a1a":"#e0dbd2"}`,
+                        flex:1,padding:"8px 4px",minHeight:44,borderRadius:8,border:`1.5px solid ${softs===s?"#1a1a1a":"#e0dbd2"}`,
                         cursor:"pointer",fontSize:13,fontWeight:softs===s?700:400,
                         background:softs===s?"#1a1a1a":"#faf9f7",
                         color:softs===s?"#fff":"#666",transition:"all 0.15s"
@@ -447,7 +443,7 @@ export default function App() {
               width:"100%",padding:"15px",borderRadius:12,border:"none",
               cursor:canGo?"pointer":"not-allowed",fontSize:15,fontWeight:600,letterSpacing:"0.01em",
               background:canGo?"#e05c2a":"#e0dbd2",
-              color:canGo?"#fff":"#aaa",
+              color:canGo?"#fff":"#857c6d",
               boxShadow:canGo?"0 2px 12px rgba(224,92,42,0.25)":"none",
               transition:"all 0.18s",display:"flex",alignItems:"center",justifyContent:"center",gap:8
             }}>
