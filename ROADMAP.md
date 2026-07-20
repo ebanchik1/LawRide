@@ -1,4 +1,4 @@
-# ScholarshipIQ Roadmap
+# LawRide Roadmap
 
 Sequenced by what builds the **moat** (a proprietary, timing-calibrated outcome
 dataset + returning users) and what answers the **open question** (does anyone
@@ -24,19 +24,20 @@ Aggregating competitors' data (Spivey/7Sage) sits *outside* the arc — a distra
 **Resume-analyzed softs + outcome capture.** See the design doc:
 `~/.gstack/projects/ebanchik1-scholarshipiq/elibanchik-main-design-20260623-151952.md`
 
-- Lane C: softs 4-bucket remap + regression guard *(in progress)*
-- Lane B: `/api/resume` PDF → softs classification (base64-JSON, 3MB cap, never-log-body)
-- Lane A: Supabase `submissions` table (surrogate PK, `bucket_source`, append-only)
-- Lane D: frontend upload UI + email capture + override + fallback
+- Lane C: softs 4-bucket remap + regression guard ✅
+- Lane B: `/api/resume` PDF → softs classification (base64-JSON, 3MB cap, never-log-body) ✅
+- Lane A: Supabase `submissions` table (surrogate PK, `bucket_source`, append-only) ✅
+- Lane D: frontend upload UI + email capture + override + fallback ✅
 
 **Gate before scaling it:** watch 5 real applicants use it (the assignment).
+Analytics events are now live (below), so the gate is measurable.
 
-## Next — cheap, high-signal
+## Next — run the gate
 
-**Analytics / event tracking (~1 hr).** `@vercel/analytics` is already installed;
-add custom events: resume_uploaded, estimate_run, recommendations_run, returned.
-This is how you stop *guessing* whether anyone uses it. Do this right after the
-current build ships.
+The cheap, high-signal work is done — custom events now fire (`resume_uploaded`,
+`estimate_run`, `recommendations_run`, `returned`). What's left here is not code:
+**watch 5 real applicants use it** and read the event stream to see whether
+anyone walks the arc.
 
 ## Then — the returning-user loop (the real moat surface)
 
@@ -68,7 +69,8 @@ else has. Skip unless a dataset is both free and uniquely additive.
 
 ## Done
 
-- ✅ Resume upload — designed + eng-reviewed (building now)
+- ✅ Resume-analyzed softs + outcome capture — all 4 lanes shipped (resume classify, `/api/submit`, 4-bucket remap, upload/email UI)
+- ✅ Analytics event tracking — `resume_uploaded`, `estimate_run`, `recommendations_run`, `returned`
 - ✅ Quality foundation — tests, lint, CI, timing-bug fix
 - ✅ API security hardening (cost-abuse vectors closed)
 - ✅ Mobile/UX polish

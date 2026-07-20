@@ -1,14 +1,10 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
 import { Analytics } from "@vercel/analytics/react";
+import { track } from "@vercel/analytics";
 
 import SCHOOLS from "./schools.js";
 import { getTimingLabel, TIMING_PROFILES, scoreApplicant, estimateOutcomes } from "./lib/estimate.js";
 import { parseRecommendations } from "./lib/recommendations.js";
-
-function slugify(name) {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-}
 
 
 const TIER_META = {
@@ -45,6 +41,16 @@ export default function App() {
   const [email, setEmail] = useState("");
   const [saveState, setSaveState] = useState(""); // ''|'saving'|'saved'|'error'
 
+  // Fire a `returned` event when a prior visitor comes back (localStorage flag),
+  // so analytics can separate returning users from first-timers — the retention
+  // signal the moat depends on. Set the flag on first visit either way.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("lr_visited")) track("returned");
+      else localStorage.setItem("lr_visited", "1");
+    } catch { /* private mode / storage disabled — skip silently */ }
+  }, []);
+
   const filtered = SCHOOLS.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase()) && !selected.find(x => x.name === s.name)
   ).slice(0, 9);
@@ -75,7 +81,7 @@ export default function App() {
       });
       const resp = await fetch("/api/resume", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pdf_base64: b64 }) });
       const d = await resp.json();
-      if (d.ok && d.bucket) { setSofts(d.bucket); setBucketSource("ai"); setResumeReasons(d.reasons || []); }
+      if (d.ok && d.bucket) { setSofts(d.bucket); setBucketSource("ai"); setResumeReasons(d.reasons || []); track("resume_uploaded", { bucket: d.bucket }); }
       else { setResumeMsg("Couldn't read your resume — pick your softs level manually below."); }
     } catch {
       setResumeMsg("Couldn't read your resume — pick your softs level manually below.");
@@ -109,6 +115,7 @@ export default function App() {
     setActiveTab("results");
     setAiInsight("");
     setLoading(false);
+    track("estimate_run", { schools: res.length, softs_source: bucketSource });
   };
 
   const getAI = async () => {
@@ -135,7 +142,7 @@ export default function App() {
       if (!resp.ok) throw new Error("api");
       const d = await resp.json();
       setAiInsight(d.content?.[0]?.text || "Could not generate insight.");
-    } catch(e) {
+    } catch {
       setAiInsight("AI unavailable right now. The estimator and compare features still work fully — try AI Strategy again in a moment.");
     }
     setAiLoading(false);
@@ -148,6 +155,7 @@ export default function App() {
     setRecsLoading(true);
     setRecs(null);
     setActiveTab("recommendations");
+    track("recommendations_run", { state: recStateFilter || null, tuition_max: recTuitionMax || null });
     // Pre-score and sort schools, send only top ~40 most relevant
     let pool = SCHOOLS.map(s => ({
       ...s,
