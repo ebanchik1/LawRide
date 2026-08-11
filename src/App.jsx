@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { Analytics } from "@vercel/analytics/react";
 
 import SCHOOLS from "./schools.js";
 import { getTimingLabel, TIMING_PROFILES, scoreApplicant, estimateOutcomes } from "./lib/estimate.js";
@@ -1115,7 +1114,6 @@ export default function App() {
         )}
 
       </div>
-      <Analytics />
     </div>
   );
 }
