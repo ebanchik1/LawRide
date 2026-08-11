@@ -6,9 +6,15 @@
 //
 // Returns:
 //   { ok: true,  bucket, reasons, bucket_source: "ai" }   on a clean read
-//   { ok: false, fallback: true }                          on any unreadable/parse
-//        failure (HTTP 200) so the client falls back to the manual dropdown and
-//        the estimate is never blocked.
+//   { ok: false, fallback: true, reason }                  on any failure (HTTP
+//        200) so the client falls back to the manual dropdown and the estimate
+//        is never blocked. `reason` is machine-readable and lands in analytics:
+//          upstream_<status> — Anthropic errored (outage, auth, overload)
+//          bad_json          — the response wasn't parseable JSON
+//          bad_bucket        — parsed, but the bucket wasn't one of the four
+//          server_error      — anything else on our side
+//        Keeping these apart matters: collapsed into one, an Anthropic outage
+//        reads as "the model produced unusable output for every resume".
 //
 // PII rule: the resume is streamed to Anthropic and never persisted or logged.
 // Error paths log status only — NEVER the request body or extracted text.
@@ -87,7 +93,11 @@ export default async function handler(req, res) {
 
     if (!resp.ok) {
       console.error("Resume classify: Anthropic returned", resp.status); // status only — never the body
-      return res.status(200).json({ ok: false, fallback: true });
+      // Echo WHY. Without a reason the client can only report "unreadable", so
+      // an Anthropic outage would show up in analytics as "the model produced
+      // unusable output for 100% of resumes" — a false read that points
+      // debugging at the prompt instead of at upstream.
+      return res.status(200).json({ ok: false, fallback: true, reason: `upstream_${resp.status}` });
     }
 
     const data = await resp.json();
@@ -98,7 +108,9 @@ export default async function handler(req, res) {
 
     const bucket = parsed?.bucket;
     if (!BUCKETS.includes(bucket)) {
-      return res.status(200).json({ ok: false, fallback: true });
+      // The genuine "model output was unusable" case — the only one that should
+      // ever be reported as `unreadable`.
+      return res.status(200).json({ ok: false, fallback: true, reason: parsed ? "bad_bucket" : "bad_json" });
     }
     const reasons = Array.isArray(parsed.reasons)
       ? parsed.reasons.filter((r) => typeof r === "string").slice(0, 4).map((r) => r.slice(0, 120))
@@ -107,6 +119,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, bucket, reasons, bucket_source: "ai" });
   } catch {
     console.error("Resume classify: unexpected error"); // no error object — it could echo the body
-    return res.status(200).json({ ok: false, fallback: true });
+    return res.status(200).json({ ok: false, fallback: true, reason: "server_error" });
   }
 }

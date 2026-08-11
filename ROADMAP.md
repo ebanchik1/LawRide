@@ -30,14 +30,39 @@ Aggregating competitors' data (Spivey/7Sage) sits *outside* the arc — a distra
 - Lane D: frontend upload UI + email capture + override + fallback ✅
 
 **Gate before scaling it:** watch 5 real applicants use it (the assignment).
-Analytics events are now live (below), so the gate is measurable.
 
 ## Next — run the gate
 
-The cheap, high-signal work is done — custom events now fire (`resume_uploaded`,
-`estimate_run`, `recommendations_run`, `returned`). What's left here is not code:
-**watch 5 real applicants use it** and read the event stream to see whether
-anyone walks the arc.
+**Correction to the previous version of this doc**, which claimed the gate was
+already measurable because custom events were live. It wasn't, for three
+reasons — all now fixed:
+
+1. **The email capture fired no event at all.** `saveResults()` called
+   `/api/submit` and set component state, and that was it. The single
+   conversion the whole moat depends on was the one step with no
+   instrumentation, so estimate → save could not be computed.
+2. **`/api/submit` shared the AI rate-limit bucket and required
+   `ANTHROPIC_API_KEY`.** A normal session (resume + estimate + strategy +
+   recommendations + a retry) could exhaust the 10/min allowance and then 429
+   the save. In the UI that surfaced as a generic error, so a rate-limited save
+   and a user declining to hand over an email looked identical in the data.
+3. **Vercel Web Analytics cannot be the source of truth.** Custom events are
+   unavailable on Hobby entirely, capped at 2 properties on Pro, and retained
+   for one month on Hobby. Funnel events now go to our own Supabase `events`
+   table; Vercel still gets a name-only ping as a convenience dashboard.
+
+Live now: `session_start`, `returned`, `estimate_run`, `recommendations_run`,
+`resume_attempted`, `resume_uploaded`, `resume_failed`, `save_attempted`,
+`save_succeeded`, `save_failed` — every failure carrying a machine-readable
+reason, every event carrying both a per-visit `session_id` and a per-person
+`visitor_id` so per-visit and per-person conversion stay separable. `submissions`
+carries the same ids, so events and rows are one SQL join.
+
+**What's left here is still not code: watch 5 real applicants use it.** The
+queries to read while doing it are at the bottom of
+`supabase/migrations/0003_events.sql`. Before trusting any conversion number,
+check the `save_failed` reason breakdown — if `rate_limited` or `not_configured`
+appears at all, you're measuring infrastructure, not the product.
 
 ## Then — the returning-user loop (the real moat surface)
 
@@ -71,6 +96,9 @@ else has. Skip unless a dataset is both free and uniquely additive.
 
 - ✅ Resume-analyzed softs + outcome capture — all 4 lanes shipped (resume classify, `/api/submit`, 4-bucket remap, upload/email UI)
 - ✅ Analytics event tracking — `resume_uploaded`, `estimate_run`, `recommendations_run`, `returned`
+- ✅ Gate instrumentation — save/resume funnel events with failure reasons, own
+  `events` table (Vercel custom events don't work on Hobby), `/api/submit`
+  decoupled from the AI rate limiter, per-visit + per-person correlation ids
 - ✅ Quality foundation — tests, lint, CI, timing-bug fix
 - ✅ API security hardening (cost-abuse vectors closed)
 - ✅ Mobile/UX polish

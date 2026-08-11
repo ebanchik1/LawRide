@@ -1,11 +1,36 @@
 import { useState, useEffect } from "react";
 import { Analytics } from "@vercel/analytics/react";
-import { track } from "@vercel/analytics";
 
 import SCHOOLS from "./schools.js";
 import { getTimingLabel, TIMING_PROFILES, scoreApplicant, estimateOutcomes } from "./lib/estimate.js";
 import { parseRecommendations } from "./lib/recommendations.js";
+import { getSession } from "./lib/session.js";
+import { sendEvent, mirrorToVercel } from "./lib/analytics.js";
 
+// Resolved once per page load. Every event and the /api/submit body carry these
+// ids — that is what makes the funnel joinable: `estimate_run` and the Supabase
+// row it did (or didn't) become now share a key. Two ids on purpose (per-visit
+// vs per-person conversion are different numbers); see src/lib/session.js.
+const IDS = getSession();
+
+// Single entry point for telemetry, so no call site can forget the ids and
+// nothing telemetry-related can throw into the render path.
+//
+// Writes to our own `events` table (the source of truth) and mirrors the bare
+// name to Vercel's dashboard, which cannot be the source of truth: custom
+// events are unavailable on Hobby and capped at 2 properties on Pro.
+// See src/lib/analytics.js.
+function ev(name, props) {
+  sendEvent(name, IDS, props);
+  mirrorToVercel(name);
+}
+
+// `session_start` must fire once per VISIT, not once per <App> mount. App is a
+// route element, so react-router remounts it whenever the user navigates back
+// from a school page — and StrictMode double-invokes mount effects in dev, the
+// very environment you'd use to sanity-check the funnel. Both would inflate the
+// denominator with visits that never happened. Module scope outlives both.
+let sessionStartFired = false;
 
 const TIER_META = {
   T14:  { label:"T14",    color:"#38bdf8", bg:"rgba(56,189,248,0.14)" },
@@ -41,14 +66,20 @@ export default function App() {
   const [email, setEmail] = useState("");
   const [saveState, setSaveState] = useState(""); // ''|'saving'|'saved'|'error'
 
-  // Fire a `returned` event when a prior visitor comes back (localStorage flag),
-  // so analytics can separate returning users from first-timers — the retention
-  // signal the moat depends on. Set the flag on first visit either way.
+  // Retention signal. `IDS.returning` means a known visitor starting a new
+  // visit — not merely a known visitor, which would count page reloads as
+  // returns. It supersedes the old `lr_visited` flag: it says not just that
+  // someone came back but who, so a return is attributable to the estimate they
+  // ran last time. `session_start` is the denominator every other rate divides
+  // by, so it must fire exactly once per visit — hence the module-scope latch.
   useEffect(() => {
-    try {
-      if (localStorage.getItem("lr_visited")) track("returned");
-      else localStorage.setItem("lr_visited", "1");
-    } catch { /* private mode / storage disabled — skip silently */ }
+    if (sessionStartFired) return;
+    sessionStartFired = true;
+    // `session_persisted:false` means sessionStorage is unusable for this
+    // visitor, so their reloads are indistinguishable from new visits — worth
+    // being able to filter those rows out before trusting a per-visit rate.
+    ev("session_start", { returning: IDS.returning, session_persisted: IDS.sessionPersisted });
+    if (IDS.returning) ev("returned");
   }, []);
 
   const filtered = SCHOOLS.filter(s =>
@@ -67,10 +98,24 @@ export default function App() {
   // Resume → AI softs classification. Reads the PDF to base64 in-browser, posts
   // JSON to /api/resume, pre-fills the (still-editable) softs control on success,
   // falls back to manual on any failure. Never blocks the estimate.
+  // Every exit path is instrumented. Previously only success fired an event, so
+  // the classifier's real-world failure rate was invisible: a resume that
+  // couldn't be read and a resume never uploaded looked the same in analytics.
+  // `resume_attempted` gives the denominator; `resume_failed` carries a reason
+  // so client-side rejections, rate limits, and model/parse failures separate.
   const classifyResume = async (file) => {
     if (!file) return;
-    if (file.type !== "application/pdf") { setResumeMsg("PDF only for now."); return; }
-    if (file.size > 3 * 1024 * 1024) { setResumeMsg("Please keep your PDF under 3MB."); return; }
+    ev("resume_attempted");
+    if (file.type !== "application/pdf") {
+      setResumeMsg("PDF only for now.");
+      ev("resume_failed", { reason: "not_pdf" });
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      setResumeMsg("Please keep your PDF under 3MB.");
+      ev("resume_failed", { reason: "too_large" });
+      return;
+    }
     setResumeLoading(true); setResumeMsg(""); setResumeReasons([]);
     try {
       const b64 = await new Promise((res, rej) => {
@@ -80,26 +125,76 @@ export default function App() {
         r.readAsDataURL(file);
       });
       const resp = await fetch("/api/resume", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pdf_base64: b64 }) });
-      const d = await resp.json();
-      if (d.ok && d.bucket) { setSofts(d.bucket); setBucketSource("ai"); setResumeReasons(d.reasons || []); track("resume_uploaded", { bucket: d.bucket }); }
-      else { setResumeMsg("Couldn't read your resume — pick your softs level manually below."); }
+      const d = await resp.json().catch(() => ({}));
+      if (d.ok && d.bucket) {
+        setSofts(d.bucket); setBucketSource("ai"); setResumeReasons(d.reasons || []);
+        ev("resume_uploaded", { bucket: d.bucket });
+      } else if (resp.status === 429) {
+        setResumeMsg("We're at capacity right now — pick your softs level manually below.");
+        ev("resume_failed", { reason: "rate_limited" });
+      } else if (!resp.ok) {
+        setResumeMsg("Couldn't read your resume — pick your softs level manually below.");
+        ev("resume_failed", { reason: `http_${resp.status}` });
+      } else {
+        // 200 with { ok:false, fallback:true, reason }. /api/resume distinguishes
+        // an Anthropic outage (upstream_*) from genuinely unusable model output
+        // (bad_json / bad_bucket); forward its reason rather than flattening
+        // every upstream failure into "unreadable".
+        setResumeMsg("Couldn't read your resume — pick your softs level manually below.");
+        ev("resume_failed", { reason: d.reason || "unreadable" });
+      }
     } catch {
       setResumeMsg("Couldn't read your resume — pick your softs level manually below.");
+      ev("resume_failed", { reason: "network" });
     }
     setResumeLoading(false);
   };
 
   // Save the submission (email capture). Append-only; sends bucket_source so the
   // dataset distinguishes AI-scored from self-reported softs.
+  //
+  // This is the conversion the whole outcome dataset rests on, and it used to
+  // fire no analytics at all — so a rate-limited save, a misconfigured DB, and a
+  // user who simply didn't want to hand over their email were indistinguishable.
+  // Now: `save_attempted` on every try (the denominator), then exactly one of
+  // `save_succeeded` / `save_failed{reason}`. Never both, never neither.
   const saveResults = async () => {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setSaveState("error"); return; }
+    ev("save_attempted", { has_ai_softs: bucketSource === "ai" });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setSaveState("error");
+      ev("save_failed", { reason: "invalid_email" });
+      return;
+    }
     setSaveState("saving");
     try {
-      const resp = await fetch("/api/submit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, gpa: gpaNum, lsat: lsatNum, app_date: appDate || null, softs_bucket: softs, bucket_source: bucketSource, schools: results.map(r => r.name) }) });
-      const d = await resp.json();
-      setSaveState(d.saved ? "saved" : "error");
+      const resp = await fetch("/api/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email, gpa: gpaNum, lsat: lsatNum, app_date: appDate || null,
+          softs_bucket: softs, bucket_source: bucketSource,
+          schools: results.map(r => r.name),
+          session_id: IDS.sessionId,
+          visitor_id: IDS.visitorId,
+        }),
+      });
+      const d = await resp.json().catch(() => ({}));
+      if (d.saved) {
+        setSaveState("saved");
+        ev("save_succeeded", { schools: results.length, softs_source: bucketSource });
+      } else {
+        setSaveState("error");
+        // `reason` is echoed by /api/submit (not_configured | db_error); the
+        // status codes cover guard rejections that never reach that logic.
+        const reason = resp.status === 429 ? "rate_limited"
+          : resp.status === 400 ? "rejected"
+          : !resp.ok ? `http_${resp.status}`
+          : (d.reason || "unknown");
+        ev("save_failed", { reason });
+      }
     } catch {
       setSaveState("error");
+      ev("save_failed", { reason: "network" });
     }
   };
   const timingKey = getTimingLabel(appDate);
@@ -115,7 +210,7 @@ export default function App() {
     setActiveTab("results");
     setAiInsight("");
     setLoading(false);
-    track("estimate_run", { schools: res.length, softs_source: bucketSource });
+    ev("estimate_run", { schools: res.length, softs_source: bucketSource });
   };
 
   const getAI = async () => {
@@ -155,7 +250,7 @@ export default function App() {
     setRecsLoading(true);
     setRecs(null);
     setActiveTab("recommendations");
-    track("recommendations_run", { state: recStateFilter || null, tuition_max: recTuitionMax || null });
+    ev("recommendations_run", { state: recStateFilter || null, tuition_max: recTuitionMax || null });
     // Pre-score and sort schools, send only top ~40 most relevant
     let pool = SCHOOLS.map(s => ({
       ...s,
