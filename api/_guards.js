@@ -40,10 +40,26 @@ const EVENT_MAX_PER_WINDOW = 120;
 // Tune via env; generous default so real users are never the ones capped.
 const DAILY_CAP = Number(process.env.AI_DAILY_CALL_CAP || 3000);
 
-const redisConfigured = Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
-const redis = redisConfigured
-  ? new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN })
-  : null;
+// Accept BOTH naming conventions.
+//
+// Upstash's own docs use UPSTASH_REDIS_REST_*, but the Vercel Marketplace
+// integration injects the same credentials as KV_REST_API_URL / KV_REST_API_TOKEN.
+// Reading only one set means connecting the database through the Vercel UI
+// appears to work, injects five variables, and leaves the limiter silently OFF —
+// with the daily spend cap a no-op — because the names didn't match. Nothing
+// errors, so there is no signal. Accept either.
+//
+// Deliberately NOT falling back to KV_REST_API_READ_ONLY_TOKEN: every operation
+// here is INCR/EXPIRE, so a read-only token would fail on every call and drop
+// us back to the in-memory fallback — the same silent no-op, one layer deeper.
+const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+
+const redisConfigured = Boolean(redisUrl && redisToken);
+const redis = redisConfigured ? new Redis({ url: redisUrl, token: redisToken }) : null;
+
+// Exported so a deploy can be checked without guessing. See /api/health.
+export const rateLimitBackend = redisConfigured ? "redis" : "memory";
 
 // Per-instance fallback window (see note above).
 const memWindows = new Map();
