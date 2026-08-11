@@ -86,3 +86,47 @@ describe("guardSubmit", () => {
     expect(await guardSubmit(reqFrom("8.8.8.9"))).toBeNull();
   });
 });
+
+describe("Redis credential naming", () => {
+  // The Vercel Marketplace Upstash integration injects KV_REST_API_* while
+  // Upstash's own docs use UPSTASH_REDIS_REST_*. Reading only one set means
+  // connecting the database through the Vercel UI leaves the limiter silently
+  // off and the daily spend cap a no-op, with nothing anywhere to indicate it.
+  async function backendWith(env) {
+    vi.resetModules();
+    for (const k of ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "KV_REST_API_URL", "KV_REST_API_TOKEN"]) {
+      delete process.env[k];
+    }
+    Object.assign(process.env, env);
+    const m = await import("./_guards.js");
+    return m.rateLimitBackend;
+  }
+
+  it("uses redis with the Upstash-native names", async () => {
+    expect(await backendWith({
+      UPSTASH_REDIS_REST_URL: "https://example.upstash.io",
+      UPSTASH_REDIS_REST_TOKEN: "tok",
+    })).toBe("redis");
+  });
+
+  it("uses redis with the Vercel Marketplace KV_* names", async () => {
+    expect(await backendWith({
+      KV_REST_API_URL: "https://example.upstash.io",
+      KV_REST_API_TOKEN: "tok",
+    })).toBe("redis");
+  });
+
+  it("falls back to memory when only half a credential pair is present", async () => {
+    expect(await backendWith({ KV_REST_API_URL: "https://example.upstash.io" })).toBe("memory");
+    expect(await backendWith({ UPSTASH_REDIS_REST_TOKEN: "tok" })).toBe("memory");
+  });
+
+  it("does not accept the read-only token as a substitute", async () => {
+    // Every operation is INCR/EXPIRE. A read-only token would fail on every
+    // call and silently drop back to the in-memory fallback.
+    expect(await backendWith({
+      KV_REST_API_URL: "https://example.upstash.io",
+      KV_REST_API_READ_ONLY_TOKEN: "ro-tok",
+    })).toBe("memory");
+  });
+});
