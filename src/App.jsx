@@ -25,6 +25,27 @@ function ev(name, props) {
   mirrorToVercel(name);
 }
 
+// User-facing copy for every way a save can fail.
+//
+// These used to be one string — "Enter a valid email" — shown for ALL failures,
+// including ones that had nothing to do with the address typed. Someone hitting
+// a rate limit or a database outage was told their email was wrong, would
+// retype a perfectly good address, fail again, and leave. The save is the
+// conversion the outcome dataset depends on; telling people the wrong thing
+// about why it failed is the most expensive small bug in the app.
+//
+// Keys match the `reason` values fired to analytics in saveResults(), so the
+// message a user saw is recoverable from the event stream.
+const SAVE_ERRORS = {
+  invalid_email: "That doesn't look like a valid email — mind checking it?",
+  rate_limited:  "Too many requests just now. Wait a moment and try again — your results are safe.",
+  rejected:      "We couldn't accept those details. Check your GPA and LSAT, then try again.",
+  not_configured:"Saving is temporarily unavailable. Your results are still on screen — try again shortly.",
+  db_error:      "Saving is temporarily unavailable. Your results are still on screen — try again shortly.",
+  network:       "Couldn't reach the server. Check your connection and try again.",
+  unknown:       "Something went wrong saving. Your results are still on screen — try again shortly.",
+};
+
 // `session_start` must fire once per VISIT, not once per <App> mount. App is a
 // route element, so react-router remounts it whenever the user navigates back
 // from a school page — and StrictMode double-invokes mount effects in dev, the
@@ -65,6 +86,7 @@ export default function App() {
   const [resumeMsg, setResumeMsg] = useState("");
   const [email, setEmail] = useState("");
   const [saveState, setSaveState] = useState(""); // ''|'saving'|'saved'|'error'
+  const [saveError, setSaveError] = useState("");  // user-facing text for the current failure
 
   // Retention signal. `IDS.returning` means a known visitor starting a new
   // visit — not merely a known visitor, which would count page reloads as
@@ -158,14 +180,22 @@ export default function App() {
   // user who simply didn't want to hand over their email were indistinguishable.
   // Now: `save_attempted` on every try (the denominator), then exactly one of
   // `save_succeeded` / `save_failed{reason}`. Never both, never neither.
+  // One place that sets the error state, picks the message, and fires the
+  // event — so a new failure path can't get a reason in analytics but the
+  // wrong words on screen, which is exactly how the old bug happened.
+  const fail = (reason) => {
+    setSaveState("error");
+    setSaveError(SAVE_ERRORS[reason] || SAVE_ERRORS.unknown);
+    ev("save_failed", { reason });
+  };
+
   const saveResults = async () => {
     ev("save_attempted", { has_ai_softs: bucketSource === "ai" });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setSaveState("error");
-      ev("save_failed", { reason: "invalid_email" });
+      fail("invalid_email");
       return;
     }
-    setSaveState("saving");
+    setSaveState("saving"); setSaveError("");
     try {
       const resp = await fetch("/api/submit", {
         method: "POST",
@@ -180,21 +210,18 @@ export default function App() {
       });
       const d = await resp.json().catch(() => ({}));
       if (d.saved) {
-        setSaveState("saved");
+        setSaveState("saved"); setSaveError("");
         ev("save_succeeded", { schools: results.length, softs_source: bucketSource });
       } else {
-        setSaveState("error");
         // `reason` is echoed by /api/submit (not_configured | db_error); the
         // status codes cover guard rejections that never reach that logic.
-        const reason = resp.status === 429 ? "rate_limited"
+        fail(resp.status === 429 ? "rate_limited"
           : resp.status === 400 ? "rejected"
           : !resp.ok ? `http_${resp.status}`
-          : (d.reason || "unknown");
-        ev("save_failed", { reason });
+          : (d.reason || "unknown"));
       }
     } catch {
-      setSaveState("error");
-      ev("save_failed", { reason: "network" });
+      fail("network");
     }
   };
   const timingKey = getTimingLabel(appDate);
@@ -660,16 +687,22 @@ export default function App() {
                         <span style={{fontSize:13,color:"#2d9e5f",fontWeight:600}}>✓ Saved — we'll follow up about your cycle.</span>
                       ) : (
                         <>
-                          <input value={email} onChange={e=>{setEmail(e.target.value); if(saveState)setSaveState("");}} type="email" placeholder="you@email.com"
+                          <input value={email} onChange={e=>{setEmail(e.target.value); if(saveState){setSaveState(""); setSaveError("");}}} type="email" placeholder="you@email.com"
                             style={{padding:"8px 11px",border:`1.5px solid ${saveState==="error"?"#e05c2a":"#e0dbd2"}`,borderRadius:8,fontSize:13,background:"#faf9f7",width:200,maxWidth:"100%"}}/>
                           <button onClick={saveResults} disabled={saveState==="saving"}
                             style={{padding:"8px 14px",borderRadius:8,border:"none",background:"#1a1a1a",color:"#fff",cursor:"pointer",fontSize:13,fontWeight:600}}>
                             {saveState==="saving"?"Saving…":"Save my results"}
                           </button>
-                          {saveState==="error" && <span style={{fontSize:12,color:"#e05c2a"}}>Enter a valid email.</span>}
+                          {saveState==="error" && <span style={{fontSize:12,color:"#e05c2a"}}>{saveError || SAVE_ERRORS.unknown}</span>}
                         </>
                       )}
                     </div>
+                    {saveState!=="saved" && (
+                      <p style={{marginTop:6,fontSize:11,color:"#a09a90",maxWidth:420,lineHeight:1.5}}>
+                        We&rsquo;ll email you your results and occasional updates about your cycle.
+                        No spam, no selling your data, unsubscribe any time.
+                      </p>
+                    )}
                   </div>
                   <button onClick={getAI} disabled={aiLoading} className="cta-btn" style={{
                     padding:"9px 18px",borderRadius:10,border:"none",
